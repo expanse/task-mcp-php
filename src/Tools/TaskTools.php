@@ -143,6 +143,8 @@ final class TaskTools
      * @param string|null $priority Change priority: H, M, L, or "" to clear it
      * @param list<string>|null $addTags Tags to add, without the leading "+"
      * @param list<string>|null $removeTags Tags to remove, without the leading "-"
+     * @param list<string>|null $addDependencies UUIDs of tasks this task should depend on
+     * @param list<string>|null $removeDependencies UUIDs of dependencies to remove
      * @return array<string, mixed> The modified task
      */
     #[McpTool(name: 'modify_task')]
@@ -154,6 +156,8 @@ final class TaskTools
         ?string $priority = null,
         ?array $addTags = null,
         ?array $removeTags = null,
+        ?array $addDependencies = null,
+        ?array $removeDependencies = null,
     ): array {
         $args = [$uuid, 'modify'];
 
@@ -175,6 +179,14 @@ final class TaskTools
 
         foreach ($removeTags ?? [] as $tag) {
             $args[] = "-{$tag}";
+        }
+
+        foreach ($addDependencies ?? [] as $dependencyUuid) {
+            $args[] = "depends:{$dependencyUuid}";
+        }
+
+        foreach ($removeDependencies ?? [] as $dependencyUuid) {
+            $args[] = "depends:-{$dependencyUuid}";
         }
 
         if ($description !== null) {
@@ -204,5 +216,21 @@ final class TaskTools
         $this->tasks->run([$uuid, 'annotate', '--', $note]);
 
         return $this->getTaskDetails($uuid);
+    }
+
+    /**
+     * Sync with the configured TaskWarrior sync server. Call this explicitly
+     * before reading tasks if you need the latest state from other devices,
+     * and after writing if you want changes pushed out promptly - nothing
+     * triggers sync automatically.
+     *
+     * @return array<string, mixed>
+     */
+    #[McpTool(name: 'sync_tasks')]
+    public function syncTasks(): array
+    {
+        $output = $this->tasks->sync();
+
+        return ['output' => trim($output)];
     }
 }

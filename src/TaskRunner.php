@@ -54,6 +54,14 @@ final class TaskRunner implements TaskRunnerInterface
     }
 
     /**
+     * Sync with the configured TaskWarrior sync server and return raw stdout.
+     */
+    public function sync(): string
+    {
+        return $this->run(['sync']);
+    }
+
+    /**
      * @return array<string, string>
      */
     private function env(): array

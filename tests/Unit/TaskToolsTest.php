@@ -171,6 +171,22 @@ final class TaskToolsTest extends TestCase
         $this->tools->modifyTask(uuid: 'abc-123');
     }
 
+    public function testModifyTaskBuildsExpectedArgsForDependencyChanges(): void
+    {
+        $this->runner->queueExport([['uuid' => 'abc-123']]);
+
+        $this->tools->modifyTask(
+            uuid: 'abc-123',
+            addDependencies: ['dep-1', 'dep-2'],
+            removeDependencies: ['dep-3'],
+        );
+
+        self::assertSame(
+            [['abc-123', 'modify', 'depends:dep-1', 'depends:dep-2', 'depends:-dep-3']],
+            $this->runner->runCalls,
+        );
+    }
+
     public function testAddAnnotationRunsAnnotateThenFetchesTask(): void
     {
         $task = ['uuid' => 'abc-123', 'annotations' => [['description' => 'a note']]];
@@ -181,5 +197,24 @@ final class TaskToolsTest extends TestCase
         self::assertSame([['abc-123', 'annotate', '--', 'a note']], $this->runner->runCalls);
         self::assertSame([['abc-123']], $this->runner->exportCalls);
         self::assertSame($task, $result);
+    }
+
+    public function testSyncTasksRunsSyncAndReturnsTrimmedOutput(): void
+    {
+        $this->runner->queueRunResult("Syncing with ...\n2 changes pulled, 1 pushed.\n");
+
+        $result = $this->tools->syncTasks();
+
+        self::assertSame([['sync']], $this->runner->runCalls);
+        self::assertSame(['output' => "Syncing with ...\n2 changes pulled, 1 pushed."], $result);
+    }
+
+    public function testSyncTasksPropagatesFailure(): void
+    {
+        $this->runner->failNextRun(new RuntimeException('No sync.* settings are configured.'));
+
+        $this->expectException(RuntimeException::class);
+
+        $this->tools->syncTasks();
     }
 }

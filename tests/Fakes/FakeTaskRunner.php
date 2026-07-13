@@ -19,6 +19,9 @@ final class FakeTaskRunner implements TaskRunnerInterface
     /** @var list<list<array<string, mixed>>> */
     private array $exportQueue = [];
 
+    /** @var list<string> */
+    private array $runResultQueue = [];
+
     private ?Throwable $nextRunException = null;
 
     /**
@@ -35,7 +38,7 @@ final class FakeTaskRunner implements TaskRunnerInterface
             throw $exception;
         }
 
-        return '';
+        return $this->runResultQueue === [] ? '' : array_shift($this->runResultQueue);
     }
 
     /**
@@ -69,5 +72,18 @@ final class FakeTaskRunner implements TaskRunnerInterface
     public function failNextRun(Throwable $exception): void
     {
         $this->nextRunException = $exception;
+    }
+
+    /**
+     * Queue the result the next run() call should return.
+     */
+    public function queueRunResult(string $result): void
+    {
+        $this->runResultQueue[] = $result;
+    }
+
+    public function sync(): string
+    {
+        return $this->run(['sync']);
     }
 }

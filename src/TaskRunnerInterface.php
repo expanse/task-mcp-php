@@ -20,4 +20,9 @@ interface TaskRunnerInterface
      * @return list<array<string, mixed>>
      */
     public function export(array $filters = []): array;
+
+    /**
+     * Sync with the configured TaskWarrior sync server and return raw stdout.
+     */
+    public function sync(): string;
 }
