@@ -217,4 +217,104 @@ final class TaskToolsTest extends TestCase
 
         $this->tools->syncTasks();
     }
+
+    public function testRemoveAnnotationRunsDenotateThenFetchesTask(): void
+    {
+        $task = ['uuid' => 'abc-123', 'annotations' => []];
+        $this->runner->queueExport([$task]);
+
+        $result = $this->tools->removeAnnotation('abc-123', 'a note');
+
+        self::assertSame([['abc-123', 'denotate', '--', 'a note']], $this->runner->runCalls);
+        self::assertSame([['abc-123']], $this->runner->exportCalls);
+        self::assertSame($task, $result);
+    }
+
+    public function testDeleteTaskRunsDeleteWithConfirmationOffThenFetchesTask(): void
+    {
+        $task = ['uuid' => 'abc-123', 'status' => 'deleted'];
+        $this->runner->queueExport([$task]);
+
+        $result = $this->tools->deleteTask('abc-123');
+
+        self::assertSame([['rc.confirmation=off', 'abc-123', 'delete']], $this->runner->runCalls);
+        self::assertSame($task, $result);
+    }
+
+    public function testStartTaskRunsStartThenFetchesTask(): void
+    {
+        $task = ['uuid' => 'abc-123', 'start' => '20260101T000000Z'];
+        $this->runner->queueExport([$task]);
+
+        $result = $this->tools->startTask('abc-123');
+
+        self::assertSame([['abc-123', 'start']], $this->runner->runCalls);
+        self::assertSame($task, $result);
+    }
+
+    public function testStopTaskRunsStopThenFetchesTask(): void
+    {
+        $task = ['uuid' => 'abc-123'];
+        $this->runner->queueExport([$task]);
+
+        $result = $this->tools->stopTask('abc-123');
+
+        self::assertSame([['abc-123', 'stop']], $this->runner->runCalls);
+        self::assertSame($task, $result);
+    }
+
+    public function testBatchModifyTasksThrowsWithoutProjectOrTagsFilter(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->tools->batchModifyTasks(priority: 'H');
+    }
+
+    public function testBatchModifyTasksThrowsWhenNoFieldsProvided(): void
+    {
+        $this->runner->queueExport([['uuid' => 'abc-123']]);
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->tools->batchModifyTasks(project: 'Home');
+    }
+
+    public function testBatchModifyTasksReturnsEmptyWhenNothingMatches(): void
+    {
+        $this->runner->queueExport([]);
+
+        $result = $this->tools->batchModifyTasks(project: 'Home', priority: 'H');
+
+        self::assertSame([], $result);
+        self::assertSame([['status:pending', 'project:Home']], $this->runner->exportCalls);
+        self::assertSame([], $this->runner->runCalls);
+    }
+
+    public function testBatchModifyTasksBuildsExpectedArgsAndRefetchesByUuid(): void
+    {
+        $matched = [['uuid' => 'uuid-1'], ['uuid' => 'uuid-2']];
+        $updated = [['uuid' => 'uuid-1', 'priority' => 'H'], ['uuid' => 'uuid-2', 'priority' => 'H']];
+        $this->runner->queueExport($matched);
+        $this->runner->queueExport($updated);
+
+        $result = $this->tools->batchModifyTasks(
+            project: 'Home',
+            tags: ['errand'],
+            priority: 'H',
+            addTags: ['urgent'],
+        );
+
+        self::assertSame(
+            [
+                ['status:pending', 'project:Home', '+errand'],
+                ['uuid-1', 'uuid-2'],
+            ],
+            $this->runner->exportCalls,
+        );
+        self::assertSame(
+            [['status:pending', 'project:Home', '+errand', 'rc.confirmation=off', 'modify', 'priority:H', '+urgent']],
+            $this->runner->runCalls,
+        );
+        self::assertSame($updated, $result);
+    }
 }

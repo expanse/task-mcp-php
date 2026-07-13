@@ -219,6 +219,156 @@ final class TaskTools
     }
 
     /**
+     * Remove a note from a task. The note text must match an existing
+     * annotation (see TaskWarrior's denotate matching rules).
+     *
+     * @param string $uuid The task's UUID
+     * @param string $note The annotation text to remove
+     * @return array<string, mixed> The task
+     */
+    #[McpTool(name: 'remove_annotation')]
+    public function removeAnnotation(string $uuid, string $note): array
+    {
+        $this->tasks->run([$uuid, 'denotate', '--', $note]);
+
+        return $this->getTaskDetails($uuid);
+    }
+
+    /**
+     * Permanently delete a task. TaskWarrior keeps it as a "deleted" record
+     * rather than erasing it outright.
+     *
+     * @param string $uuid The task's UUID
+     * @return array<string, mixed> The deleted task
+     */
+    #[McpTool(name: 'delete_task')]
+    public function deleteTask(string $uuid): array
+    {
+        $this->tasks->run(['rc.confirmation=off', $uuid, 'delete']);
+
+        return $this->getTaskDetails($uuid);
+    }
+
+    /**
+     * Start the timer on a task.
+     *
+     * @param string $uuid The task's UUID
+     * @return array<string, mixed> The task
+     */
+    #[McpTool(name: 'start_task')]
+    public function startTask(string $uuid): array
+    {
+        $this->tasks->run([$uuid, 'start']);
+
+        return $this->getTaskDetails($uuid);
+    }
+
+    /**
+     * Stop the timer on a task.
+     *
+     * @param string $uuid The task's UUID
+     * @return array<string, mixed> The task
+     */
+    #[McpTool(name: 'stop_task')]
+    public function stopTask(string $uuid): array
+    {
+        $this->tasks->run([$uuid, 'stop']);
+
+        return $this->getTaskDetails($uuid);
+    }
+
+    /**
+     * Apply the same modification to every task matching a filter, in one
+     * TaskWarrior call. Requires a project or tags filter (in addition to
+     * status) so it can't accidentally match every task.
+     *
+     * @param string|null $project Only modify tasks in this exact project
+     * @param list<string>|null $tags Only modify tasks with all of these tags
+     * @param string $status One of: pending, completed, deleted, all (default: pending)
+     * @param string|null $due Change the due date, any format TaskWarrior accepts, or "" to clear it
+     * @param string|null $priority Change priority: H, M, L, or "" to clear it
+     * @param list<string>|null $addTags Tags to add, without the leading "+"
+     * @param list<string>|null $removeTags Tags to remove, without the leading "-"
+     * @param list<string>|null $addDependencies UUIDs of tasks the matched tasks should depend on
+     * @param list<string>|null $removeDependencies UUIDs of dependencies to remove
+     * @return list<array<string, mixed>> The modified tasks
+     */
+    #[McpTool(name: 'batch_modify_tasks')]
+    public function batchModifyTasks(
+        ?string $project = null,
+        ?array $tags = null,
+        string $status = 'pending',
+        ?string $due = null,
+        ?string $priority = null,
+        ?array $addTags = null,
+        ?array $removeTags = null,
+        ?array $addDependencies = null,
+        ?array $removeDependencies = null,
+    ): array {
+        if ($project === null && ($tags === null || $tags === [])) {
+            throw new InvalidArgumentException(
+                'batch_modify_tasks requires a project or tags filter, to avoid accidentally matching every task',
+            );
+        }
+
+        $filters = [];
+
+        if ($status !== 'all') {
+            $filters[] = "status:{$status}";
+        }
+
+        if ($project !== null) {
+            $filters[] = "project:{$project}";
+        }
+
+        foreach ($tags ?? [] as $tag) {
+            $filters[] = "+{$tag}";
+        }
+
+        $matched = $this->tasks->export($filters);
+
+        if ($matched === []) {
+            return [];
+        }
+
+        $args = [...$filters, 'rc.confirmation=off', 'modify'];
+
+        if ($due !== null) {
+            $args[] = "due:{$due}";
+        }
+
+        if ($priority !== null) {
+            $args[] = "priority:{$priority}";
+        }
+
+        foreach ($addTags ?? [] as $tag) {
+            $args[] = "+{$tag}";
+        }
+
+        foreach ($removeTags ?? [] as $tag) {
+            $args[] = "-{$tag}";
+        }
+
+        foreach ($addDependencies ?? [] as $dependencyUuid) {
+            $args[] = "depends:{$dependencyUuid}";
+        }
+
+        foreach ($removeDependencies ?? [] as $dependencyUuid) {
+            $args[] = "depends:-{$dependencyUuid}";
+        }
+
+        if (count($args) === count($filters) + 2) {
+            throw new InvalidArgumentException('batch_modify_tasks requires at least one field to change');
+        }
+
+        $this->tasks->run($args);
+
+        $uuids = array_column($matched, 'uuid');
+
+        return $this->tasks->export($uuids);
+    }
+
+    /**
      * Sync with the configured TaskWarrior sync server. Call this explicitly
      * before reading tasks if you need the latest state from other devices,
      * and after writing if you want changes pushed out promptly - nothing
