@@ -13,6 +13,7 @@ final class TaskRunner implements TaskRunnerInterface
         private readonly string $binary = 'task',
         private readonly ?string $taskrc = null,
         private readonly ?string $taskdata = null,
+        private readonly ?float $timeout = 30.0,
     ) {
     }
 
@@ -24,6 +25,7 @@ final class TaskRunner implements TaskRunnerInterface
     public function run(array $args): string
     {
         $process = new Process([$this->binary, ...$args], env: $this->env());
+        $process->setTimeout($this->timeout);
         $process->run();
 
         if (! $process->isSuccessful()) {
