@@ -17,6 +17,29 @@ final class TaskTools
     }
 
     /**
+     * TaskWarrior doesn't reject an unrecognized attribute name on modify -
+     * it silently reinterprets the whole "name:value" token as literal
+     * description text instead, which can overwrite a task's description
+     * with garbage. Filtering by an unknown name is safer (just an empty
+     * result) but still a silent footgun. Check against the real UDA list
+     * ourselves so a typo becomes a clear error instead of either of those.
+     *
+     * @param list<string> $names
+     */
+    private function assertKnownUdaNames(array $names): void
+    {
+        $known = array_column($this->tasks->udas(), 'name');
+        $unknown = array_diff($names, $known);
+
+        if ($unknown !== []) {
+            throw new InvalidArgumentException(sprintf(
+                'Unknown UDA(s): %s. Call list_udas to see what is defined.',
+                implode(', ', $unknown),
+            ));
+        }
+    }
+
+    /**
      * Create a new task.
      *
      * @param string $description The task description
@@ -71,7 +94,10 @@ final class TaskTools
      *
      * @param string $status One of: pending, completed, deleted, all (default: pending)
      * @param string|null $project Filter by exact project name
-     * @param list<string>|null $tags Only return tasks with all of these tags
+     * @param list<string>|null $tags Only return tasks with all of these tags. Also
+     *     accepts TaskWarrior's virtual tags (BLOCKED, READY, WAITING, OVERDUE, DUE, ...)
+     * @param array<string, string>|null $udaFilters Only return tasks where each named
+     *     User Defined Attribute equals the given value. See list_udas for what's available.
      * @param int|null $limit Maximum number of tasks to return
      * @return list<array<string, mixed>>
      */
@@ -80,6 +106,7 @@ final class TaskTools
         string $status = 'pending',
         ?string $project = null,
         ?array $tags = null,
+        ?array $udaFilters = null,
         ?int $limit = null,
     ): array {
         $filters = [];
@@ -94,6 +121,14 @@ final class TaskTools
 
         foreach ($tags ?? [] as $tag) {
             $filters[] = "+{$tag}";
+        }
+
+        if ($udaFilters !== null) {
+            $this->assertKnownUdaNames(array_keys($udaFilters));
+        }
+
+        foreach ($udaFilters ?? [] as $name => $value) {
+            $filters[] = "{$name}:{$value}";
         }
 
         $results = $this->tasks->export($filters);
@@ -145,6 +180,9 @@ final class TaskTools
      * @param list<string>|null $removeTags Tags to remove, without the leading "-"
      * @param list<string>|null $addDependencies UUIDs of tasks this task should depend on
      * @param list<string>|null $removeDependencies UUIDs of dependencies to remove
+     * @param array<string, string>|null $udas User Defined Attributes to set, keyed by
+     *     name, e.g. {"staleness": "fresh"}. Use "" as the value to clear one. See
+     *     list_udas for what's available and any constrained values.
      * @return array<string, mixed> The modified task
      */
     #[McpTool(name: 'modify_task')]
@@ -158,6 +196,7 @@ final class TaskTools
         ?array $removeTags = null,
         ?array $addDependencies = null,
         ?array $removeDependencies = null,
+        ?array $udas = null,
     ): array {
         $args = [$uuid, 'modify'];
 
@@ -187,6 +226,14 @@ final class TaskTools
 
         foreach ($removeDependencies ?? [] as $dependencyUuid) {
             $args[] = "depends:-{$dependencyUuid}";
+        }
+
+        if ($udas !== null) {
+            $this->assertKnownUdaNames(array_keys($udas));
+        }
+
+        foreach ($udas ?? [] as $name => $value) {
+            $args[] = "{$name}:{$value}";
         }
 
         if ($description !== null) {
@@ -291,6 +338,10 @@ final class TaskTools
      * @param list<string>|null $removeTags Tags to remove, without the leading "-"
      * @param list<string>|null $addDependencies UUIDs of tasks the matched tasks should depend on
      * @param list<string>|null $removeDependencies UUIDs of dependencies to remove
+     * @param array<string, string>|null $udaFilters Only match tasks where each named
+     *     User Defined Attribute equals the given value
+     * @param array<string, string>|null $udas User Defined Attributes to set on every
+     *     matched task, keyed by name. Use "" as the value to clear one.
      * @return list<array<string, mixed>> The modified tasks
      */
     #[McpTool(name: 'batch_modify_tasks')]
@@ -304,6 +355,8 @@ final class TaskTools
         ?array $removeTags = null,
         ?array $addDependencies = null,
         ?array $removeDependencies = null,
+        ?array $udaFilters = null,
+        ?array $udas = null,
     ): array {
         if ($project === null && ($tags === null || $tags === [])) {
             throw new InvalidArgumentException(
@@ -323,6 +376,14 @@ final class TaskTools
 
         foreach ($tags ?? [] as $tag) {
             $filters[] = "+{$tag}";
+        }
+
+        if ($udaFilters !== null) {
+            $this->assertKnownUdaNames(array_keys($udaFilters));
+        }
+
+        foreach ($udaFilters ?? [] as $name => $value) {
+            $filters[] = "{$name}:{$value}";
         }
 
         $matched = $this->tasks->export($filters);
@@ -357,6 +418,14 @@ final class TaskTools
             $args[] = "depends:-{$dependencyUuid}";
         }
 
+        if ($udas !== null) {
+            $this->assertKnownUdaNames(array_keys($udas));
+        }
+
+        foreach ($udas ?? [] as $name => $value) {
+            $args[] = "{$name}:{$value}";
+        }
+
         if (count($args) === count($filters) + 2) {
             throw new InvalidArgumentException('batch_modify_tasks requires at least one field to change');
         }
@@ -382,5 +451,19 @@ final class TaskTools
         $output = $this->tasks->sync();
 
         return ['output' => trim($output)];
+    }
+
+    /**
+     * List the User Defined Attributes (UDAs) configured for this
+     * TaskWarrior installation - custom fields beyond the built-in
+     * project/due/priority/tags/depends, available for use in modify_task's,
+     * batch_modify_tasks', and list_tasks' uda parameters.
+     *
+     * @return list<array{name: string, label: ?string, type: ?string, values: ?list<string>}>
+     */
+    #[McpTool(name: 'list_udas')]
+    public function listUdas(): array
+    {
+        return $this->tasks->udas();
     }
 }

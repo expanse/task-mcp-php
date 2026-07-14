@@ -82,6 +82,28 @@ final class TaskToolsTest extends TestCase
         );
     }
 
+    public function testListTasksWithUdaFiltersBuildsExpectedFilterList(): void
+    {
+        $this->runner->queueUdas($this->sampleUdas());
+        $this->runner->queueExport([]);
+
+        $this->tools->listTasks(udaFilters: ['staleness' => 'stale', 'link' => 'https://example.com']);
+
+        self::assertSame(
+            [['status:pending', 'staleness:stale', 'link:https://example.com']],
+            $this->runner->exportCalls,
+        );
+    }
+
+    public function testListTasksThrowsForUnknownUdaFilterName(): void
+    {
+        $this->runner->queueUdas($this->sampleUdas());
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->tools->listTasks(udaFilters: ['not_a_real_uda' => 'x']);
+    }
+
     public function testListTasksWithStatusAllOmitsStatusFilter(): void
     {
         $this->runner->queueExport([]);
@@ -185,6 +207,28 @@ final class TaskToolsTest extends TestCase
             [['abc-123', 'modify', 'depends:dep-1', 'depends:dep-2', 'depends:-dep-3']],
             $this->runner->runCalls,
         );
+    }
+
+    public function testModifyTaskBuildsExpectedArgsForUdaChanges(): void
+    {
+        $this->runner->queueUdas($this->sampleUdas());
+        $this->runner->queueExport([['uuid' => 'abc-123']]);
+
+        $this->tools->modifyTask(uuid: 'abc-123', udas: ['staleness' => 'fresh', 'link' => '']);
+
+        self::assertSame(
+            [['abc-123', 'modify', 'staleness:fresh', 'link:']],
+            $this->runner->runCalls,
+        );
+    }
+
+    public function testModifyTaskThrowsForUnknownUdaName(): void
+    {
+        $this->runner->queueUdas($this->sampleUdas());
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->tools->modifyTask(uuid: 'abc-123', udas: ['not_a_real_uda' => 'x']);
     }
 
     public function testAddAnnotationRunsAnnotateThenFetchesTask(): void
@@ -316,5 +360,64 @@ final class TaskToolsTest extends TestCase
             $this->runner->runCalls,
         );
         self::assertSame($updated, $result);
+    }
+
+    public function testBatchModifyTasksBuildsExpectedArgsForUdaFiltersAndUdas(): void
+    {
+        $matched = [['uuid' => 'uuid-1']];
+        $updated = [['uuid' => 'uuid-1', 'staleness' => 'fresh']];
+        $this->runner->queueUdas($this->sampleUdas());
+        $this->runner->queueExport($matched);
+        $this->runner->queueUdas($this->sampleUdas());
+        $this->runner->queueExport($updated);
+
+        $result = $this->tools->batchModifyTasks(
+            project: 'Home',
+            udaFilters: ['staleness' => 'stale'],
+            udas: ['staleness' => 'fresh'],
+        );
+
+        self::assertSame(
+            [
+                ['status:pending', 'project:Home', 'staleness:stale'],
+                ['uuid-1'],
+            ],
+            $this->runner->exportCalls,
+        );
+        self::assertSame(
+            [['status:pending', 'project:Home', 'staleness:stale', 'rc.confirmation=off', 'modify', 'staleness:fresh']],
+            $this->runner->runCalls,
+        );
+        self::assertSame($updated, $result);
+    }
+
+    public function testBatchModifyTasksThrowsForUnknownUdaName(): void
+    {
+        $this->runner->queueExport([['uuid' => 'uuid-1']]);
+        $this->runner->queueUdas($this->sampleUdas());
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->tools->batchModifyTasks(project: 'Home', udas: ['not_a_real_uda' => 'x']);
+    }
+
+    public function testListUdasReturnsWhatTheRunnerReports(): void
+    {
+        $this->runner->queueUdas($this->sampleUdas());
+
+        $result = $this->tools->listUdas();
+
+        self::assertSame($this->sampleUdas(), $result);
+    }
+
+    /**
+     * @return list<array{name: string, label: ?string, type: ?string, values: ?list<string>}>
+     */
+    private function sampleUdas(): array
+    {
+        return [
+            ['name' => 'link', 'label' => 'URL', 'type' => 'string', 'values' => null],
+            ['name' => 'staleness', 'label' => 'Staleness', 'type' => 'string', 'values' => ['fresh', 'stale']],
+        ];
     }
 }

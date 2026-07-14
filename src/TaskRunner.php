@@ -64,6 +64,45 @@ final class TaskRunner implements TaskRunnerInterface
     }
 
     /**
+     * List the User Defined Attributes (UDAs) configured for this
+     * TaskWarrior installation.
+     *
+     * @return list<array{name: string, label: ?string, type: ?string, values: ?list<string>}>
+     */
+    public function udas(): array
+    {
+        $output = $this->run(['show', 'uda']);
+
+        $definitions = [];
+
+        foreach (explode("\n", $output) as $line) {
+            if (preg_match('/^uda\.([a-zA-Z0-9_]+)\.(label|type|values)\s{2,}(.*)$/', $line, $matches) !== 1) {
+                continue;
+            }
+
+            [, $name, $attribute, $value] = $matches;
+            $definitions[$name][$attribute] = $value;
+        }
+
+        $udas = [];
+
+        foreach ($definitions as $name => $attributes) {
+            $values = isset($attributes['values'])
+                ? array_values(array_filter(explode(',', $attributes['values']), fn (string $v): bool => $v !== ''))
+                : null;
+
+            $udas[] = [
+                'name' => $name,
+                'label' => $attributes['label'] ?? null,
+                'type' => $attributes['type'] ?? null,
+                'values' => $values === [] ? null : $values,
+            ];
+        }
+
+        return $udas;
+    }
+
+    /**
      * @return array<string, string>
      */
     private function env(): array

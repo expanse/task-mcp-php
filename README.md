@@ -4,7 +4,9 @@ An MCP server exposing [TaskWarrior](https://taskwarrior.org/) as tools for LLM 
 
 ## Status
 
-Implements 11 tools via `Expanse\TaskMcp\Tools\TaskTools`: `add_task`, `list_tasks`, `get_task_details`, `mark_task_done`, `modify_task` (attributes, tags, and dependencies), `add_annotation`, `remove_annotation`, `delete_task`, `start_task`, `stop_task`, `batch_modify_tasks`, and `sync_tasks`.
+Implements 12 tools via `Expanse\TaskMcp\Tools\TaskTools`: `add_task`, `list_tasks`, `get_task_details`, `mark_task_done`, `modify_task` (attributes, tags, dependencies, and UDAs), `add_annotation`, `remove_annotation`, `delete_task`, `start_task`, `stop_task`, `batch_modify_tasks`, `sync_tasks`, and `list_udas`.
+
+`list_tasks`, `modify_task`, and `batch_modify_tasks` all accept User Defined Attributes (UDAs) - custom fields beyond TaskWarrior's built-ins, configured per-installation. Call `list_udas` first to see what's actually defined (name, type, and allowed values for constrained ones); every UDA name passed to `udas`/`udaFilters` is checked against that list before being sent to TaskWarrior. This matters more than it sounds: TaskWarrior doesn't reject an unrecognized attribute name on `modify` - it silently reinterprets the whole `name:value` token as literal description text instead, which can overwrite a task's description. Validating UDA names ourselves turns that into a clear error.
 
 Sync is never triggered automatically — call `sync_tasks` explicitly before reading if you need the latest state from other devices, or after writing if you want changes pushed out promptly.
 

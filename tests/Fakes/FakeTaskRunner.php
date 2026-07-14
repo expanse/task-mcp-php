@@ -22,6 +22,9 @@ final class FakeTaskRunner implements TaskRunnerInterface
     /** @var list<string> */
     private array $runResultQueue = [];
 
+    /** @var list<list<array{name: string, label: ?string, type: ?string, values: ?list<string>}>> */
+    private array $udasQueue = [];
+
     private ?Throwable $nextRunException = null;
 
     /**
@@ -85,5 +88,27 @@ final class FakeTaskRunner implements TaskRunnerInterface
     public function sync(): string
     {
         return $this->run(['sync']);
+    }
+
+    /**
+     * @return list<array{name: string, label: ?string, type: ?string, values: ?list<string>}>
+     */
+    public function udas(): array
+    {
+        if ($this->udasQueue === []) {
+            throw new LogicException('FakeTaskRunner::udas() called with no queued result');
+        }
+
+        return array_shift($this->udasQueue);
+    }
+
+    /**
+     * Queue the result the next udas() call should return.
+     *
+     * @param list<array{name: string, label: ?string, type: ?string, values: ?list<string>}> $result
+     */
+    public function queueUdas(array $result): void
+    {
+        $this->udasQueue[] = $result;
     }
 }

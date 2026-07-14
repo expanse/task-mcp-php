@@ -25,4 +25,12 @@ interface TaskRunnerInterface
      * Sync with the configured TaskWarrior sync server and return raw stdout.
      */
     public function sync(): string;
+
+    /**
+     * List the User Defined Attributes (UDAs) configured for this
+     * TaskWarrior installation.
+     *
+     * @return list<array{name: string, label: ?string, type: ?string, values: ?list<string>}>
+     */
+    public function udas(): array;
 }

@@ -36,4 +36,59 @@ final class TaskRunnerTest extends TestCase
 
         self::assertSame("hello\n", $output);
     }
+
+    public function testUdasParsesRealTaskWarriorOutput(): void
+    {
+        $dir = sys_get_temp_dir() . '/task-mcp-php-test-' . uniqid();
+        mkdir($dir);
+        $taskrc = $dir . '/.taskrc';
+        $taskdata = $dir . '/data';
+
+        file_put_contents($taskrc, implode("\n", [
+            "data.location={$taskdata}",
+            'uda.link.label=URL',
+            'uda.link.type=string',
+            'uda.staleness.label=Staleness',
+            'uda.staleness.type=string',
+            'uda.staleness.values=fresh,stale,',
+        ]));
+
+        $runner = new TaskRunner(taskrc: $taskrc, taskdata: $taskdata);
+
+        $udas = $runner->udas();
+        $byName = [];
+
+        foreach ($udas as $uda) {
+            $byName[$uda['name']] = $uda;
+        }
+
+        self::assertSame(['name' => 'link', 'label' => 'URL', 'type' => 'string', 'values' => null], $byName['link']);
+        self::assertSame(
+            ['name' => 'staleness', 'label' => 'Staleness', 'type' => 'string', 'values' => ['fresh', 'stale']],
+            $byName['staleness'],
+        );
+
+        self::removeDirectory($dir);
+    }
+
+    private static function removeDirectory(string $path): void
+    {
+        $items = scandir($path);
+
+        if ($items === false) {
+            return;
+        }
+
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+
+            $itemPath = "{$path}/{$item}";
+
+            is_dir($itemPath) ? self::removeDirectory($itemPath) : unlink($itemPath);
+        }
+
+        rmdir($path);
+    }
 }
