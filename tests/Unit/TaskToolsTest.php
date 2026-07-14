@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Expanse\TaskMcp\Tests\Unit;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use Expanse\TaskMcp\Tests\Fakes\FakeTaskRunner;
 use Expanse\TaskMcp\Tools\TaskTools;
 use InvalidArgumentException;
@@ -408,6 +410,93 @@ final class TaskToolsTest extends TestCase
         $result = $this->tools->listUdas();
 
         self::assertSame($this->sampleUdas(), $result);
+    }
+
+    public function testListProjectsCountsByProjectExcludingProjectless(): void
+    {
+        $this->runner->queueExport([
+            ['uuid' => '1', 'project' => 'Home'],
+            ['uuid' => '2', 'project' => 'Home'],
+            ['uuid' => '3', 'project' => 'Work'],
+            ['uuid' => '4'],
+        ]);
+
+        $result = $this->tools->listProjects();
+
+        self::assertSame([['status:pending']], $this->runner->exportCalls);
+        self::assertSame(
+            [['project' => 'Home', 'count' => 2], ['project' => 'Work', 'count' => 1]],
+            $result,
+        );
+    }
+
+    public function testListProjectsWithStatusAllOmitsStatusFilter(): void
+    {
+        $this->runner->queueExport([]);
+
+        $this->tools->listProjects(status: 'all');
+
+        self::assertSame([[]], $this->runner->exportCalls);
+    }
+
+    public function testListTagsCountsByTag(): void
+    {
+        $this->runner->queueExport([
+            ['uuid' => '1', 'tags' => ['errand', 'urgent']],
+            ['uuid' => '2', 'tags' => ['errand']],
+            ['uuid' => '3'],
+        ]);
+
+        $result = $this->tools->listTags();
+
+        self::assertSame([['status:pending']], $this->runner->exportCalls);
+        self::assertSame(
+            [['tag' => 'errand', 'count' => 2], ['tag' => 'urgent', 'count' => 1]],
+            $result,
+        );
+    }
+
+    public function testProjectStatusReplicatesTheSummaryReportsMath(): void
+    {
+        $tenDaysAgo = (new DateTimeImmutable('-10 days', new DateTimeZone('UTC')))->format('Ymd\THis\Z');
+        $now = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Ymd\THis\Z');
+
+        // Home: 1 pending (10 days old) + 1 completed (fresh) -> 50% complete, ~5 day avg age
+        $this->runner->queueExport([
+            ['uuid' => '1', 'project' => 'Home', 'entry' => $tenDaysAgo],
+            ['uuid' => '2', 'project' => 'Work', 'entry' => $now],
+        ]);
+        $this->runner->queueExport([
+            ['uuid' => '3', 'project' => 'Home', 'entry' => $now],
+        ]);
+
+        $result = $this->tools->projectStatus();
+
+        self::assertSame([['status:pending']], [$this->runner->exportCalls[0]]);
+        self::assertSame([['status:completed']], [$this->runner->exportCalls[1]]);
+
+        $byProject = [];
+        foreach ($result as $row) {
+            $byProject[$row['project']] = $row;
+        }
+
+        self::assertSame(1, $byProject['Home']['remaining']);
+        self::assertSame(1, $byProject['Home']['completed']);
+        self::assertSame(50.0, $byProject['Home']['completePercentage']);
+        self::assertEqualsWithDelta(5.0, $byProject['Home']['averageAgeDays'], 0.01);
+
+        self::assertSame(1, $byProject['Work']['remaining']);
+        self::assertSame(0, $byProject['Work']['completed']);
+        self::assertSame(0.0, $byProject['Work']['completePercentage']);
+        self::assertEqualsWithDelta(0.0, $byProject['Work']['averageAgeDays'], 0.01);
+    }
+
+    public function testProjectStatusReturnsEmptyWhenNoTasks(): void
+    {
+        $this->runner->queueExport([]);
+        $this->runner->queueExport([]);
+
+        self::assertSame([], $this->tools->projectStatus());
     }
 
     /**

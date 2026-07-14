@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Expanse\TaskMcp\Tools;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use Expanse\TaskMcp\TaskRunnerInterface;
 use InvalidArgumentException;
 use PhpMcp\Server\Attributes\McpTool;
@@ -465,5 +467,129 @@ final class TaskTools
     public function listUdas(): array
     {
         return $this->tasks->udas();
+    }
+
+    /**
+     * List the distinct project names in use, with a task count for each.
+     * Matches TaskWarrior's own `task projects` report, which only
+     * considers pending tasks by default.
+     *
+     * @param string $status One of: pending, completed, deleted, all (default: pending)
+     * @return list<array{project: string, count: int}>
+     */
+    #[McpTool(name: 'list_projects')]
+    public function listProjects(string $status = 'pending'): array
+    {
+        $counts = [];
+
+        foreach ($this->tasks->export($status === 'all' ? [] : ["status:{$status}"]) as $task) {
+            $project = $task['project'] ?? null;
+
+            if ($project === null) {
+                continue;
+            }
+
+            $counts[$project] = ($counts[$project] ?? 0) + 1;
+        }
+
+        ksort($counts);
+
+        $result = [];
+
+        foreach ($counts as $project => $count) {
+            $result[] = ['project' => $project, 'count' => $count];
+        }
+
+        return $result;
+    }
+
+    /**
+     * List the distinct tags in use, with a task count for each. Matches
+     * TaskWarrior's own `task tags` report, which only considers pending
+     * tasks by default.
+     *
+     * @param string $status One of: pending, completed, deleted, all (default: pending)
+     * @return list<array{tag: string, count: int}>
+     */
+    #[McpTool(name: 'list_tags')]
+    public function listTags(string $status = 'pending'): array
+    {
+        $counts = [];
+
+        foreach ($this->tasks->export($status === 'all' ? [] : ["status:{$status}"]) as $task) {
+            foreach ($task['tags'] ?? [] as $tag) {
+                $counts[$tag] = ($counts[$tag] ?? 0) + 1;
+            }
+        }
+
+        ksort($counts);
+
+        $result = [];
+
+        foreach ($counts as $tag => $count) {
+            $result[] = ['tag' => $tag, 'count' => $count];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Per-project completion stats, replicating TaskWarrior's `summary`
+     * report (which has no structured/export output of its own - this is
+     * computed from raw exported tasks, not shelled out to `summary`
+     * directly). Excludes deleted tasks entirely, same as the real report.
+     * Projectless tasks are grouped under "(none)".
+     *
+     * @return list<array{project: string, remaining: int, completed: int, completePercentage: float, averageAgeDays: float}>
+     */
+    #[McpTool(name: 'project_status')]
+    public function projectStatus(): array
+    {
+        $projects = [];
+
+        foreach ($this->tasks->export(['status:pending']) as $task) {
+            $name = $task['project'] ?? '(none)';
+            $projects[$name]['remaining'] = ($projects[$name]['remaining'] ?? 0) + 1;
+            $projects[$name]['completed'] ??= 0;
+            $projects[$name]['ages'][] = $this->ageInDays($task['entry']);
+        }
+
+        foreach ($this->tasks->export(['status:completed']) as $task) {
+            $name = $task['project'] ?? '(none)';
+            $projects[$name]['completed'] = ($projects[$name]['completed'] ?? 0) + 1;
+            $projects[$name]['remaining'] ??= 0;
+            $projects[$name]['ages'][] = $this->ageInDays($task['entry']);
+        }
+
+        ksort($projects);
+
+        $result = [];
+
+        foreach ($projects as $name => $data) {
+            $total = $data['remaining'] + $data['completed'];
+
+            $result[] = [
+                'project' => $name,
+                'remaining' => $data['remaining'],
+                'completed' => $data['completed'],
+                'completePercentage' => $total > 0 ? round($data['completed'] / $total * 100, 1) : 0.0,
+                'averageAgeDays' => round(array_sum($data['ages']) / count($data['ages']), 1),
+            ];
+        }
+
+        return $result;
+    }
+
+    private function ageInDays(string $entry): float
+    {
+        $entryDate = DateTimeImmutable::createFromFormat('Ymd\THis\Z', $entry, new DateTimeZone('UTC'));
+
+        if ($entryDate === false) {
+            throw new RuntimeException("Could not parse TaskWarrior entry date: {$entry}");
+        }
+
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+
+        return ($now->getTimestamp() - $entryDate->getTimestamp()) / 86400;
     }
 }

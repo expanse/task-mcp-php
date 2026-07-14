@@ -4,7 +4,9 @@ An MCP server exposing [TaskWarrior](https://taskwarrior.org/) as tools for LLM 
 
 ## Status
 
-Implements 12 tools via `Expanse\TaskMcp\Tools\TaskTools`: `add_task`, `list_tasks`, `get_task_details`, `mark_task_done`, `modify_task` (attributes, tags, dependencies, and UDAs), `add_annotation`, `remove_annotation`, `delete_task`, `start_task`, `stop_task`, `batch_modify_tasks`, `sync_tasks`, and `list_udas`.
+Implements 15 tools via `Expanse\TaskMcp\Tools\TaskTools`: `add_task`, `list_tasks`, `get_task_details`, `mark_task_done`, `modify_task` (attributes, tags, dependencies, and UDAs), `add_annotation`, `remove_annotation`, `delete_task`, `start_task`, `stop_task`, `batch_modify_tasks`, `sync_tasks`, `list_udas`, `list_projects`, `list_tags`, and `project_status`.
+
+TaskWarrior's built-in reports (`summary`, `burndown.*`, etc.) have no structured/export output of their own - `project_status` replicates `summary`'s math (remaining/completed/complete % per project, average task age) computed from raw exported tasks rather than shelling out to `summary` directly. Verified against a real `task` binary that the numbers match exactly. Graphical reports (`burndown.*`, `ghistory.*`) are intentionally not exposed - they're ASCII charts meant for terminal rendering, with nothing structured to hand an LLM.
 
 `list_tasks`, `modify_task`, and `batch_modify_tasks` all accept User Defined Attributes (UDAs) - custom fields beyond TaskWarrior's built-ins, configured per-installation. Call `list_udas` first to see what's actually defined (name, type, and allowed values for constrained ones); every UDA name passed to `udas`/`udaFilters` is checked against that list before being sent to TaskWarrior. This matters more than it sounds: TaskWarrior doesn't reject an unrecognized attribute name on `modify` - it silently reinterprets the whole `name:value` token as literal description text instead, which can overwrite a task's description. Validating UDA names ourselves turns that into a clear error.
 
