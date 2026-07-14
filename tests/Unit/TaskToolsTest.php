@@ -89,7 +89,7 @@ final class TaskToolsTest extends TestCase
         $this->runner->queueUdas($this->sampleUdas());
         $this->runner->queueExport([]);
 
-        $this->tools->listTasks(udaFilters: ['staleness' => 'stale', 'link' => 'https://example.com']);
+        $this->tools->listTasks(udaFilters: ['staleness:stale', 'link:https://example.com']);
 
         self::assertSame(
             [['status:pending', 'staleness:stale', 'link:https://example.com']],
@@ -103,7 +103,16 @@ final class TaskToolsTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
 
-        $this->tools->listTasks(udaFilters: ['not_a_real_uda' => 'x']);
+        $this->tools->listTasks(udaFilters: ['not_a_real_uda:x']);
+    }
+
+    public function testListTasksThrowsForMalformedUdaFilterEntry(): void
+    {
+        $this->runner->queueUdas($this->sampleUdas());
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->tools->listTasks(udaFilters: ['staleness-stale']);
     }
 
     public function testListTasksWithStatusAllOmitsStatusFilter(): void
@@ -216,7 +225,7 @@ final class TaskToolsTest extends TestCase
         $this->runner->queueUdas($this->sampleUdas());
         $this->runner->queueExport([['uuid' => 'abc-123']]);
 
-        $this->tools->modifyTask(uuid: 'abc-123', udas: ['staleness' => 'fresh', 'link' => '']);
+        $this->tools->modifyTask(uuid: 'abc-123', udas: ['staleness:fresh', 'link:']);
 
         self::assertSame(
             [['abc-123', 'modify', 'staleness:fresh', 'link:']],
@@ -230,7 +239,16 @@ final class TaskToolsTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
 
-        $this->tools->modifyTask(uuid: 'abc-123', udas: ['not_a_real_uda' => 'x']);
+        $this->tools->modifyTask(uuid: 'abc-123', udas: ['not_a_real_uda:x']);
+    }
+
+    public function testModifyTaskThrowsForMalformedUdaEntry(): void
+    {
+        $this->runner->queueUdas($this->sampleUdas());
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->tools->modifyTask(uuid: 'abc-123', udas: ['staleness-fresh']);
     }
 
     public function testAddAnnotationRunsAnnotateThenFetchesTask(): void
@@ -375,8 +393,8 @@ final class TaskToolsTest extends TestCase
 
         $result = $this->tools->batchModifyTasks(
             project: 'Home',
-            udaFilters: ['staleness' => 'stale'],
-            udas: ['staleness' => 'fresh'],
+            udaFilters: ['staleness:stale'],
+            udas: ['staleness:fresh'],
         );
 
         self::assertSame(
@@ -400,7 +418,17 @@ final class TaskToolsTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
 
-        $this->tools->batchModifyTasks(project: 'Home', udas: ['not_a_real_uda' => 'x']);
+        $this->tools->batchModifyTasks(project: 'Home', udas: ['not_a_real_uda:x']);
+    }
+
+    public function testBatchModifyTasksThrowsForMalformedUdaEntry(): void
+    {
+        $this->runner->queueExport([['uuid' => 'uuid-1']]);
+        $this->runner->queueUdas($this->sampleUdas());
+
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->tools->batchModifyTasks(project: 'Home', udas: ['not_a_real_uda']);
     }
 
     public function testListUdasReturnsWhatTheRunnerReports(): void

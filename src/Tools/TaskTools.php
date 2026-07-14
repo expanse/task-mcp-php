@@ -19,6 +19,14 @@ final class TaskTools
     }
 
     /**
+     * Parses "name:value" UDA entries into a name => value map. Accepting a
+     * list of strings, rather than a JSON object keyed by name, sidesteps a
+     * schema-generation limitation: this library's array-items inference
+     * can't distinguish an `array<string, string>` map from a plain list,
+     * so a map-shaped parameter would advertise (and validate against) a
+     * bare, unconstrained array schema - silently losing the name/value
+     * association for any client that follows it.
+     *
      * TaskWarrior doesn't reject an unrecognized attribute name on modify -
      * it silently reinterprets the whole "name:value" token as literal
      * description text instead, which can overwrite a task's description
@@ -26,12 +34,28 @@ final class TaskTools
      * result) but still a silent footgun. Check against the real UDA list
      * ourselves so a typo becomes a clear error instead of either of those.
      *
-     * @param list<string> $names
+     * @param list<string> $entries
+     * @return array<string, string>
      */
-    private function assertKnownUdaNames(array $names): void
+    private function parseUdaEntries(array $entries): array
     {
+        $parsed = [];
+
+        foreach ($entries as $entry) {
+            $separator = strpos($entry, ':');
+
+            if ($separator === false) {
+                throw new InvalidArgumentException(sprintf(
+                    'Invalid UDA entry "%s": expected "name:value" format.',
+                    $entry,
+                ));
+            }
+
+            $parsed[substr($entry, 0, $separator)] = substr($entry, $separator + 1);
+        }
+
         $known = array_column($this->tasks->udas(), 'name');
-        $unknown = array_diff($names, $known);
+        $unknown = array_diff(array_keys($parsed), $known);
 
         if ($unknown !== []) {
             throw new InvalidArgumentException(sprintf(
@@ -39,6 +63,8 @@ final class TaskTools
                 implode(', ', $unknown),
             ));
         }
+
+        return $parsed;
     }
 
     /**
@@ -98,8 +124,9 @@ final class TaskTools
      * @param string|null $project Filter by exact project name
      * @param list<string>|null $tags Only return tasks with all of these tags. Also
      *     accepts TaskWarrior's virtual tags (BLOCKED, READY, WAITING, OVERDUE, DUE, ...)
-     * @param array<string, string>|null $udaFilters Only return tasks where each named
-     *     User Defined Attribute equals the given value. See list_udas for what's available.
+     * @param list<string>|null $udaFilters Only return tasks where each named User
+     *     Defined Attribute equals the given value, as "name:value" entries (e.g.
+     *     ["staleness:fresh"]). See list_udas for what's available.
      * @param int|null $limit Maximum number of tasks to return
      * @return list<array<string, mixed>>
      */
@@ -126,11 +153,9 @@ final class TaskTools
         }
 
         if ($udaFilters !== null) {
-            $this->assertKnownUdaNames(array_keys($udaFilters));
-        }
-
-        foreach ($udaFilters ?? [] as $name => $value) {
-            $filters[] = "{$name}:{$value}";
+            foreach ($this->parseUdaEntries($udaFilters) as $name => $value) {
+                $filters[] = "{$name}:{$value}";
+            }
         }
 
         $results = $this->tasks->export($filters);
@@ -182,9 +207,9 @@ final class TaskTools
      * @param list<string>|null $removeTags Tags to remove, without the leading "-"
      * @param list<string>|null $addDependencies UUIDs of tasks this task should depend on
      * @param list<string>|null $removeDependencies UUIDs of dependencies to remove
-     * @param array<string, string>|null $udas User Defined Attributes to set, keyed by
-     *     name, e.g. {"staleness": "fresh"}. Use "" as the value to clear one. See
-     *     list_udas for what's available and any constrained values.
+     * @param list<string>|null $udas User Defined Attributes to set, as "name:value"
+     *     entries (e.g. ["staleness:fresh"]). Use "name:" (empty value) to clear one.
+     *     See list_udas for what's available and any constrained values.
      * @return array<string, mixed> The modified task
      */
     #[McpTool(name: 'modify_task')]
@@ -231,11 +256,9 @@ final class TaskTools
         }
 
         if ($udas !== null) {
-            $this->assertKnownUdaNames(array_keys($udas));
-        }
-
-        foreach ($udas ?? [] as $name => $value) {
-            $args[] = "{$name}:{$value}";
+            foreach ($this->parseUdaEntries($udas) as $name => $value) {
+                $args[] = "{$name}:{$value}";
+            }
         }
 
         if ($description !== null) {
@@ -340,10 +363,10 @@ final class TaskTools
      * @param list<string>|null $removeTags Tags to remove, without the leading "-"
      * @param list<string>|null $addDependencies UUIDs of tasks the matched tasks should depend on
      * @param list<string>|null $removeDependencies UUIDs of dependencies to remove
-     * @param array<string, string>|null $udaFilters Only match tasks where each named
-     *     User Defined Attribute equals the given value
-     * @param array<string, string>|null $udas User Defined Attributes to set on every
-     *     matched task, keyed by name. Use "" as the value to clear one.
+     * @param list<string>|null $udaFilters Only match tasks where each named User
+     *     Defined Attribute equals the given value, as "name:value" entries
+     * @param list<string>|null $udas User Defined Attributes to set on every matched
+     *     task, as "name:value" entries. Use "name:" (empty value) to clear one.
      * @return list<array<string, mixed>> The modified tasks
      */
     #[McpTool(name: 'batch_modify_tasks')]
@@ -381,11 +404,9 @@ final class TaskTools
         }
 
         if ($udaFilters !== null) {
-            $this->assertKnownUdaNames(array_keys($udaFilters));
-        }
-
-        foreach ($udaFilters ?? [] as $name => $value) {
-            $filters[] = "{$name}:{$value}";
+            foreach ($this->parseUdaEntries($udaFilters) as $name => $value) {
+                $filters[] = "{$name}:{$value}";
+            }
         }
 
         $matched = $this->tasks->export($filters);
@@ -421,11 +442,9 @@ final class TaskTools
         }
 
         if ($udas !== null) {
-            $this->assertKnownUdaNames(array_keys($udas));
-        }
-
-        foreach ($udas ?? [] as $name => $value) {
-            $args[] = "{$name}:{$value}";
+            foreach ($this->parseUdaEntries($udas) as $name => $value) {
+                $args[] = "{$name}:{$value}";
+            }
         }
 
         if (count($args) === count($filters) + 2) {
