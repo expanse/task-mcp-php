@@ -39,6 +39,10 @@ final class TaskRunnerTest extends TestCase
 
     public function testUdasParsesRealTaskWarriorOutput(): void
     {
+        if (shell_exec('which task 2>/dev/null') === null) {
+            self::markTestSkipped('task binary not found');
+        }
+
         $dir = sys_get_temp_dir() . '/task-mcp-php-test-' . uniqid();
         mkdir($dir);
         $taskrc = $dir . '/.taskrc';
