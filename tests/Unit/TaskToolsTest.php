@@ -305,6 +305,25 @@ final class TaskToolsTest extends TestCase
         self::assertSame($task, $result);
     }
 
+    public function testRejectTaskTagsAnnotatesThenDeletes(): void
+    {
+        $task = ['uuid' => 'abc-123', 'status' => 'deleted', 'tags' => ['rejected']];
+        $this->runner->queueExport([$task]);
+
+        $result = $this->tools->rejectTask('abc-123', 'No longer needed');
+
+        self::assertSame(
+            [
+                ['abc-123', 'modify', '+rejected'],
+                ['abc-123', 'annotate', '--', 'No longer needed'],
+                ['rc.confirmation=off', 'abc-123', 'delete'],
+            ],
+            $this->runner->runCalls,
+        );
+        self::assertSame([['abc-123']], $this->runner->exportCalls);
+        self::assertSame($task, $result);
+    }
+
     public function testStartTaskRunsStartThenFetchesTask(): void
     {
         $task = ['uuid' => 'abc-123', 'start' => '20260101T000000Z'];

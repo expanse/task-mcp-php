@@ -322,6 +322,24 @@ final class TaskTools
     }
 
     /**
+     * Reject a task — mark it as intentionally dropped rather than just deleted.
+     * Tags the task +rejected, annotates a reason, then deletes it.
+     *
+     * @param string $uuid The task's UUID
+     * @param string $reason Why the task was rejected (added as an annotation)
+     * @return array<string, mixed> The rejected task
+     */
+    #[McpTool(name: 'reject_task')]
+    public function rejectTask(string $uuid, string $reason): array
+    {
+        $this->tasks->run([$uuid, 'modify', '+rejected']);
+        $this->tasks->run([$uuid, 'annotate', '--', $reason]);
+        $this->tasks->run(['rc.confirmation=off', $uuid, 'delete']);
+
+        return $this->getTaskDetails($uuid);
+    }
+
+    /**
      * Start the timer on a task.
      *
      * @param string $uuid The task's UUID
