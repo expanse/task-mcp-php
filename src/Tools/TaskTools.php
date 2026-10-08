@@ -75,6 +75,10 @@ final class TaskTools
      * @param list<string>|null $tags Tags to attach, without the leading "+"
      * @param string|null $due Due date, any format TaskWarrior accepts (e.g. "tomorrow", "2026-08-01")
      * @param string|null $priority Priority: H, M, or L
+     * @param string|null $recur Recurrence frequency, e.g. "weekly", "monthly", "2years"
+     * @param string|null $until Recurrence end date, e.g. "2028-01-01", "eoy"
+     * @param string|null $scheduled Scheduled date, e.g. "tomorrow", "2026-12-01"
+     * @param string|null $wait Wait date (task is hidden until then), e.g. "monday", "2026-11-01"
      * @return array<string, mixed> The created task
      */
     #[McpTool(name: 'add_task')]
@@ -84,6 +88,10 @@ final class TaskTools
         ?array $tags = null,
         ?string $due = null,
         ?string $priority = null,
+        ?string $recur = null,
+        ?string $until = null,
+        ?string $scheduled = null,
+        ?string $wait = null,
     ): array {
         $args = ['add'];
 
@@ -101,6 +109,22 @@ final class TaskTools
 
         if ($priority !== null) {
             $args[] = "priority:{$priority}";
+        }
+
+        if ($recur !== null) {
+            $args[] = "recur:{$recur}";
+        }
+
+        if ($until !== null) {
+            $args[] = "until:{$until}";
+        }
+
+        if ($scheduled !== null) {
+            $args[] = "scheduled:{$scheduled}";
+        }
+
+        if ($wait !== null) {
+            $args[] = "wait:{$wait}";
         }
 
         $args[] = '--';
@@ -203,6 +227,10 @@ final class TaskTools
      * @param string|null $project Reassign the task's project
      * @param string|null $due Change the due date, any format TaskWarrior accepts, or "" to clear it
      * @param string|null $priority Change priority: H, M, L, or "" to clear it
+     * @param string|null $recur Change recurrence frequency, or "" to clear it
+     * @param string|null $until Change recurrence end date, or "" to clear it
+     * @param string|null $scheduled Change scheduled date, or "" to clear it
+     * @param string|null $wait Change wait date, or "" to clear it
      * @param list<string>|null $addTags Tags to add, without the leading "+"
      * @param list<string>|null $removeTags Tags to remove, without the leading "-"
      * @param list<string>|null $addDependencies UUIDs of tasks this task should depend on
@@ -219,6 +247,10 @@ final class TaskTools
         ?string $project = null,
         ?string $due = null,
         ?string $priority = null,
+        ?string $recur = null,
+        ?string $until = null,
+        ?string $scheduled = null,
+        ?string $wait = null,
         ?array $addTags = null,
         ?array $removeTags = null,
         ?array $addDependencies = null,
@@ -237,6 +269,22 @@ final class TaskTools
 
         if ($priority !== null) {
             $args[] = "priority:{$priority}";
+        }
+
+        if ($recur !== null) {
+            $args[] = "recur:{$recur}";
+        }
+
+        if ($until !== null) {
+            $args[] = "until:{$until}";
+        }
+
+        if ($scheduled !== null) {
+            $args[] = "scheduled:{$scheduled}";
+        }
+
+        if ($wait !== null) {
+            $args[] = "wait:{$wait}";
         }
 
         foreach ($addTags ?? [] as $tag) {
@@ -377,6 +425,10 @@ final class TaskTools
      * @param string $status One of: pending, completed, deleted, all (default: pending)
      * @param string|null $due Change the due date, any format TaskWarrior accepts, or "" to clear it
      * @param string|null $priority Change priority: H, M, L, or "" to clear it
+     * @param string|null $recur Change recurrence frequency, or "" to clear it
+     * @param string|null $until Change recurrence end date, or "" to clear it
+     * @param string|null $scheduled Change scheduled date, or "" to clear it
+     * @param string|null $wait Change wait date, or "" to clear it
      * @param list<string>|null $addTags Tags to add, without the leading "+"
      * @param list<string>|null $removeTags Tags to remove, without the leading "-"
      * @param list<string>|null $addDependencies UUIDs of tasks the matched tasks should depend on
@@ -394,6 +446,10 @@ final class TaskTools
         string $status = 'pending',
         ?string $due = null,
         ?string $priority = null,
+        ?string $recur = null,
+        ?string $until = null,
+        ?string $scheduled = null,
+        ?string $wait = null,
         ?array $addTags = null,
         ?array $removeTags = null,
         ?array $addDependencies = null,
@@ -441,6 +497,22 @@ final class TaskTools
 
         if ($priority !== null) {
             $args[] = "priority:{$priority}";
+        }
+
+        if ($recur !== null) {
+            $args[] = "recur:{$recur}";
+        }
+
+        if ($until !== null) {
+            $args[] = "until:{$until}";
+        }
+
+        if ($scheduled !== null) {
+            $args[] = "scheduled:{$scheduled}";
+        }
+
+        if ($wait !== null) {
+            $args[] = "wait:{$wait}";
         }
 
         foreach ($addTags ?? [] as $tag) {

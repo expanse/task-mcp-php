@@ -450,6 +450,100 @@ final class TaskToolsTest extends TestCase
         $this->tools->batchModifyTasks(project: 'Home', udas: ['not_a_real_uda']);
     }
 
+    public function testAddTaskWithRecurAndUntilBuildsExpectedArgs(): void
+    {
+        $created = ['uuid' => 'abc-123', 'description' => 'Pay rent'];
+        $this->runner->queueExport([$created]);
+
+        $this->tools->addTask(
+            description: 'Pay rent',
+            due: 'eom',
+            recur: 'weekly',
+            until: '2028-01-01',
+        );
+
+        self::assertSame(
+            [['add', 'due:eom', 'recur:weekly', 'until:2028-01-01', '--', 'Pay rent']],
+            $this->runner->runCalls,
+        );
+    }
+
+    public function testAddTaskWithScheduledAndWaitBuildsExpectedArgs(): void
+    {
+        $created = ['uuid' => 'abc-123', 'description' => 'Plan trip'];
+        $this->runner->queueExport([$created]);
+
+        $this->tools->addTask(
+            description: 'Plan trip',
+            scheduled: 'tomorrow',
+            wait: 'monday',
+        );
+
+        self::assertSame(
+            [['add', 'scheduled:tomorrow', 'wait:monday', '--', 'Plan trip']],
+            $this->runner->runCalls,
+        );
+    }
+
+    public function testModifyTaskWithRecurUntilScheduledWaitBuildsExpectedArgs(): void
+    {
+        $this->runner->queueExport([['uuid' => 'abc-123']]);
+
+        $this->tools->modifyTask(
+            uuid: 'abc-123',
+            recur: 'monthly',
+            until: 'eoy',
+            scheduled: '2026-12-01',
+            wait: '2026-11-01',
+        );
+
+        self::assertSame(
+            [['abc-123', 'modify', 'recur:monthly', 'until:eoy', 'scheduled:2026-12-01', 'wait:2026-11-01']],
+            $this->runner->runCalls,
+        );
+    }
+
+    public function testModifyTaskClearsRecurWithEmptyString(): void
+    {
+        $this->runner->queueExport([['uuid' => 'abc-123']]);
+
+        $this->tools->modifyTask(uuid: 'abc-123', recur: '');
+
+        self::assertSame(
+            [['abc-123', 'modify', 'recur:']],
+            $this->runner->runCalls,
+        );
+    }
+
+    public function testBatchModifyTasksWithRecurUntilScheduledWaitBuildsExpectedArgs(): void
+    {
+        $matched = [['uuid' => 'uuid-1']];
+        $updated = [['uuid' => 'uuid-1', 'recur' => 'weekly']];
+        $this->runner->queueExport($matched);
+        $this->runner->queueExport($updated);
+
+        $result = $this->tools->batchModifyTasks(
+            project: 'Home',
+            recur: 'weekly',
+            until: 'eoy',
+            scheduled: 'tomorrow',
+            wait: 'monday',
+        );
+
+        self::assertSame(
+            [
+                ['status:pending', 'project:Home'],
+                ['uuid-1'],
+            ],
+            $this->runner->exportCalls,
+        );
+        self::assertSame(
+            [['status:pending', 'project:Home', 'rc.confirmation=off', 'modify', 'recur:weekly', 'until:eoy', 'scheduled:tomorrow', 'wait:monday']],
+            $this->runner->runCalls,
+        );
+        self::assertSame($updated, $result);
+    }
+
     public function testListUdasReturnsWhatTheRunnerReports(): void
     {
         $this->runner->queueUdas($this->sampleUdas());
